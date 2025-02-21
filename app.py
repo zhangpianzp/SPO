@@ -178,7 +178,7 @@ def main():
             "API KEY", type="password", value=st.session_state.get("api_key", ""))
         model_name = st.text_input("模型名称", value="")
 
-        if st.button("保存配置"):
+        if st.button("连通性测试并添加模型"):
             try:
                 if not model_name:
                     st.error("请输入模型名称")
