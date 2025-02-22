@@ -119,25 +119,22 @@ def main():
     if "optimization_results" not in st.session_state:
         st.session_state.optimization_results = []
 
-    if "config_loaded" not in st.session_state:
-        st.session_state.config_loaded = False
-        try:
-            config_path = Path("config/config2.yaml")
-            if config_path.exists():
-                with open(config_path, "r", encoding="utf-8") as f:
-                    config_data = yaml.safe_load(f)
-                    if "llm" in config_data:
-                        llm_config = config_data["llm"]
-                        st.session_state.base_url = llm_config.get(
-                            "base_url", "")
-                        st.session_state.api_key = llm_config.get(
-                            "api_key", "")
-                        if "models" in config_data:
-                            st.session_state.available_models = list(
-                                config_data["models"].keys())
-                            st.session_state.config_loaded = True
-        except Exception as e:
-            _logger.error(f"读取配置文件时出错：{str(e)}")
+    try:
+        config_path = Path("config/config2.yaml")
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+                if "llm" in config_data:
+                    llm_config = config_data["llm"]
+                    st.session_state.base_url = llm_config.get(
+                        "base_url", "")
+                    st.session_state.api_key = llm_config.get(
+                        "api_key", "")
+                    if "models" in config_data:
+                        st.session_state.available_models = list(
+                            config_data["models"].keys())
+    except Exception as e:
+        _logger.error(f"读取配置文件时出错：{str(e)}")
 
     workspace_dir = get_user_workspace()
 
@@ -243,118 +240,116 @@ def main():
                 st.error(f"保存配置时出错：{str(e)}")
 
         # 优化模型和优化器设置
-        if st.session_state.get("config_loaded", False):
-            st.subheader("模型设置")
-            opt_model = st.selectbox(
-                "优化模型", st.session_state.get("available_models", ["Null"]), index=0
-            )
-            opt_temp = st.slider("优化温度", 0.0, 1.0, 0.7)
+        st.subheader("模型设置")
+        opt_model = st.selectbox(
+            "优化模型", st.session_state.get("available_models", ["Null"]), index=0
+        )
+        opt_temp = st.slider("优化温度", 0.0, 1.0, 0.7)
 
-            eval_model = st.selectbox(
-                "评估模型", st.session_state.get("available_models", ["Null"]), index=0
-            )
-            eval_temp = st.slider("评估温度", 0.0, 1.0, 0.3)
+        eval_model = st.selectbox(
+            "评估模型", st.session_state.get("available_models", ["Null"]), index=0
+        )
+        eval_temp = st.slider("评估温度", 0.0, 1.0, 0.3)
 
-            exec_model = st.selectbox(
-                "执行模型", st.session_state.get("available_models", ["Null"]), index=0
-            )
-            exec_temp = st.slider("执行温度", 0.0, 1.0, 0.0)
+        exec_model = st.selectbox(
+            "执行模型", st.session_state.get("available_models", ["Null"]), index=0
+        )
+        exec_temp = st.slider("执行温度", 0.0, 1.0, 0.0)
 
-            # 优化器设置
-            st.subheader("优化器设置")
-            initial_round = st.number_input("初始轮次", 1, 100, 1)
-            max_rounds = st.number_input("最大轮次", 1, 100, 10)
+        # 优化器设置
+        st.subheader("优化器设置")
+        initial_round = st.number_input("初始轮次", 1, 100, 1)
+        max_rounds = st.number_input("最大轮次", 1, 100, 10)
 
     # 模板配置选项卡
     with tab_template:
-        if st.session_state.get("config_loaded", False):
-            st.header("模板配置")
+        st.header("模板配置")
 
-            # 模板选择/创建
-            settings_path = Path("metagpt/ext/spo/settings")
-            existing_templates = get_all_templates()
-            template_options = existing_templates + ["创建新模板"]
+        # 模板选择/创建
+        settings_path = Path("metagpt/ext/spo/settings")
+        existing_templates = get_all_templates()
+        template_options = existing_templates + ["创建新模板"]
 
-            template_selection = st.selectbox("选择模板", template_options)
-            is_new_template = template_selection == "创建新模板"
+        template_selection = st.selectbox("选择模板", template_options)
+        is_new_template = template_selection == "创建新模板"
 
-            if is_new_template:
-                template_name = st.text_input("新模板名称")
-            else:
-                template_name = template_selection
+        if is_new_template:
+            template_name = st.text_input("新模板名称")
+        else:
+            template_name = template_selection
 
-            # 初始化template_path
-            template_path = None
-            if template_name:
-                template_path = settings_path / f"{template_name}.yaml"
+        # 初始化template_path
+        template_path = None
+        if template_name:
+            template_path = settings_path / f"{template_name}.yaml"
+            template_data = load_yaml_template(template_path)
+
+        # 加载或初始化模板数据
+        template_data = {"prompt": "", "requirements": "", "qa": []}
+        if template_path and template_path.exists():
+            template_data = load_yaml_template(template_path)
+
+        if "current_template" not in st.session_state or st.session_state.current_template != template_name:
+            st.session_state.current_template = template_name
+            st.session_state.qas = template_data.get("qa", [])
+            st.session_state.prompt = template_data.get("prompt", "")
+            st.session_state.requirements = template_data.get(
+                "requirements", "")
+        elif is_new_template and not template_name:
+            # 清空所有内容
+            st.session_state.current_template = template_name
+            st.session_state.qas = []
+            st.session_state.prompt = ""
+            st.session_state.requirements = ""
+
+        # 使用session_state中的值填充输入框
+        prompt = st.text_area(
+            "提示词", value=st.session_state.get("prompt", ""), height=100)
+        requirements = st.text_area(
+            "要求", value=st.session_state.get("requirements", ""), height=100)
+
+        # 问答部分
+        st.subheader("问答示例")
+
+        if "qas" not in st.session_state:
+            st.session_state.qas = []
+
+        # 添加新问答按钮
+        if st.button("添加新问答"):
+            st.session_state.qas.append({"question": "", "answer": ""})
+
+        # 编辑问答
+        new_qas = []
+        for i in range(len(st.session_state.qas)):
+            st.markdown(f"**问答 #{i + 1}**")
+            col1, col2, col3 = st.columns([45, 45, 10])
+
+            with col1:
+                question = st.text_area(
+                    f"问题 {i + 1}", st.session_state.qas[i].get("question", ""), key=f"q_{i}", height=100
+                )
+            with col2:
+                answer = st.text_area(
+                    f"答案 {i + 1}", st.session_state.qas[i].get("answer", ""), key=f"a_{i}", height=100
+                )
+            with col3:
+                if st.button("🗑️", key=f"delete_{i}"):
+                    st.session_state.qas.pop(i)
+                    st.rerun()
+
+            new_qas.append({"question": question, "answer": answer})
+
+        if template_name:
+            template_path = settings_path / f"{template_name}.yaml"
+            template_data = load_yaml_template(template_path)
+
+            if not is_new_template:
                 template_data = load_yaml_template(template_path)
-
-            # 加载或初始化模板数据
-            template_data = {"prompt": "", "requirements": "", "qa": []}
-            if template_path and template_path.exists():
-                template_data = load_yaml_template(template_path)
-
-            if "current_template" not in st.session_state or st.session_state.current_template != template_name:
-                st.session_state.current_template = template_name
-                st.session_state.qas = template_data.get("qa", [])
-                st.session_state.prompt = template_data.get("prompt", "")
-                st.session_state.requirements = template_data.get(
-                    "requirements", "")
-            elif is_new_template and not template_name:
-                # 清空所有内容
-                st.session_state.current_template = template_name
-                st.session_state.qas = []
-                st.session_state.prompt = ""
-                st.session_state.requirements = ""
-
-            # 使用session_state中的值填充输入框
-            prompt = st.text_area(
-                "提示词", value=st.session_state.get("prompt", ""), height=100)
-            requirements = st.text_area(
-                "要求", value=st.session_state.get("requirements", ""), height=100)
-
-            # 问答部分
-            st.subheader("问答示例")
-
-            if "qas" not in st.session_state:
-                st.session_state.qas = []
-
-            # 添加新问答按钮
-            if st.button("添加新问答"):
-                st.session_state.qas.append({"question": "", "answer": ""})
-
-            # 编辑问答
-            new_qas = []
-            for i in range(len(st.session_state.qas)):
-                st.markdown(f"**问答 #{i + 1}**")
-                col1, col2, col3 = st.columns([45, 45, 10])
-
-                with col1:
-                    question = st.text_area(
-                        f"问题 {i + 1}", st.session_state.qas[i].get("question", ""), key=f"q_{i}", height=100
-                    )
-                with col2:
-                    answer = st.text_area(
-                        f"答案 {i + 1}", st.session_state.qas[i].get("answer", ""), key=f"a_{i}", height=100
-                    )
-                with col3:
-                    if st.button("🗑️", key=f"delete_{i}"):
-                        st.session_state.qas.pop(i)
-                        st.rerun()
-
-                new_qas.append({"question": question, "answer": answer})
-
-            if template_name:
-                template_path = settings_path / f"{template_name}.yaml"
-                template_data = load_yaml_template(template_path)
-
-                if not is_new_template:
-                    template_data = load_yaml_template(template_path)
-                    if "current_template" not in st.session_state or st.session_state.current_template != template_name:
-                        st.session_state.current_template = template_name
-                        st.session_state.qas = template_data.get("qa", [])
-                        prompt = template_data.get("prompt", "")
-                        requirements = template_data.get("requirements", "")
+                if "current_template" not in st.session_state or st.session_state.current_template != template_name:
+                    st.session_state.current_template = template_name
+                    st.session_state.qas = template_data.get("qa", [])
+                    prompt = template_data.get("prompt", "")
+                    requirements = template_data.get("requirements", "")
                 else:
                     # 清空内容
                     st.session_state.qas = []
@@ -375,7 +370,7 @@ def main():
 
     # 当前模板预览选项卡
     with tab_preview:
-        if st.session_state.get("config_loaded", False) and "current_template" in st.session_state:
+        if "current_template" in st.session_state:
             st.header("当前模板预览")
             preview_data = {"qa": new_qas if 'new_qas' in locals() else [],
                             "requirements": requirements if 'requirements' in locals() else "",
@@ -384,124 +379,121 @@ def main():
 
     # 优化日志选项卡
     with tab_logs:
-        if st.session_state.get("config_loaded", False):
-            st.header("优化日志")
-            log_container = st.empty()
+        st.header("优化日志")
+        log_container = st.empty()
 
-            class StreamlitSink:
-                def write(self, message):
-                    current_logs = st.session_state.get("logs", [])
-                    current_logs.append(message.strip())
-                    st.session_state.logs = current_logs
-                    log_container.code(
-                        "\n".join(current_logs), language="plaintext")
+        class StreamlitSink:
+            def write(self, message):
+                current_logs = st.session_state.get("logs", [])
+                current_logs.append(message.strip())
+                st.session_state.logs = current_logs
+                log_container.code(
+                    "\n".join(current_logs), language="plaintext")
 
-            streamlit_sink = StreamlitSink()
-            _logger.remove()
+        streamlit_sink = StreamlitSink()
+        _logger.remove()
 
-            def prompt_optimizer_filter(record):
-                return "optimizer" in record["name"].lower()
+        def prompt_optimizer_filter(record):
+            return "optimizer" in record["name"].lower()
 
-            _logger.add(
-                streamlit_sink.write,
-                format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
-                filter=prompt_optimizer_filter,
-            )
-            _logger.add(METAGPT_ROOT /
-                        "logs/{time:YYYYMMDD}.txt", level="DEBUG")
+        _logger.add(
+            streamlit_sink.write,
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+            filter=prompt_optimizer_filter,
+        )
+        _logger.add(METAGPT_ROOT /
+                    "logs/{time:YYYYMMDD}.txt", level="DEBUG")
 
-            # 开始优化按钮
-            if st.button("开始优化"):
-                try:
-                    # Initialize LLM
-                    SPO_LLM.initialize(
-                        optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
-                                         "api_key": api_key},
-                        evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,
-                                         "api_key": api_key},
-                        execute_kwargs={"model": exec_model, "temperature": exec_temp, "base_url": base_url,
-                                        "api_key": api_key},
-                    )
+        # 开始优化按钮
+        if st.button("开始优化"):
+            try:
+                # Initialize LLM
+                SPO_LLM.initialize(
+                    optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
+                                     "api_key": api_key},
+                    evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,
+                                     "api_key": api_key},
+                    execute_kwargs={"model": exec_model, "temperature": exec_temp, "base_url": base_url,
+                                    "api_key": api_key},
+                )
 
-                    # Create optimizer instance
-                    optimizer = PromptOptimizer(
-                        optimized_path=str(workspace_dir),
-                        initial_round=initial_round,
-                        max_rounds=max_rounds,
-                        template=f"{template_name}.yaml",
-                        name=template_name,
-                    )
+                # Create optimizer instance
+                optimizer = PromptOptimizer(
+                    optimized_path=str(workspace_dir),
+                    initial_round=initial_round,
+                    max_rounds=max_rounds,
+                    template=f"{template_name}.yaml",
+                    name=template_name,
+                )
 
-                    # Run optimization with progress bar
-                    with st.spinner("正在优化提示词..."):
-                        optimizer.optimize()
+                # Run optimization with progress bar
+                with st.spinner("正在优化提示词..."):
+                    optimizer.optimize()
 
-                    st.success("优化完成！")
-                    prompt_path = optimizer.root_path / "prompts"
-                    result_data = optimizer.data_utils.load_results(
-                        prompt_path)
-                    print(result_data)
-                    st.session_state.optimization_results = result_data
+                st.success("优化完成！")
+                prompt_path = optimizer.root_path / "prompts"
+                result_data = optimizer.data_utils.load_results(
+                    prompt_path)
+                print(result_data)
+                st.session_state.optimization_results = result_data
 
-                except Exception as e:
-                    st.error(f"发生错误：{str(e)}")
-                    _logger.error(f"优化过程中出错：{str(e)}")
+            except Exception as e:
+                st.error(f"发生错误：{str(e)}")
+                _logger.error(f"优化过程中出错：{str(e)}")
 
     # 优化结果选项卡
     with tab_results:
-        if st.session_state.get("config_loaded", False):
-            st.header("优化结果")
-            if st.session_state.optimization_results:
-                display_optimization_results(
-                    st.session_state.optimization_results)
+        st.header("优化结果")
+        if st.session_state.optimization_results:
+            display_optimization_results(
+                st.session_state.optimization_results)
 
     # 测试优化后提示词选项卡
     with tab_test:
-        if st.session_state.get("config_loaded", False):
-            st.header("测试优化后的提示词")
-            col1, col2 = st.columns(2)
+        st.header("测试优化后的提示词")
+        col1, col2 = st.columns(2)
 
-            with col1:
-                test_prompt = st.text_area(
-                    "优化后的提示词", value="", height=200, key="test_prompt")
+        with col1:
+            test_prompt = st.text_area(
+                "优化后的提示词", value="", height=200, key="test_prompt")
 
-            with col2:
-                test_question = st.text_area(
-                    "你的问题", value="", height=200, key="test_question")
+        with col2:
+            test_question = st.text_area(
+                "你的问题", value="", height=200, key="test_question")
 
-            if st.button("测试提示词"):
-                if test_prompt and test_question:
-                    try:
-                        with st.spinner("正在生成回答..."):
-                            SPO_LLM.initialize(
-                                optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
-                                                 "api_key": api_key},
-                                evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,
-                                                 "api_key": api_key},
-                                execute_kwargs={"model": exec_model, "temperature": exec_temp, "base_url": base_url,
-                                                "api_key": api_key},
-                            )
+        if st.button("测试提示词"):
+            if test_prompt and test_question:
+                try:
+                    with st.spinner("正在生成回答..."):
+                        SPO_LLM.initialize(
+                            optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
+                                             "api_key": api_key},
+                            evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,
+                                             "api_key": api_key},
+                            execute_kwargs={"model": exec_model, "temperature": exec_temp, "base_url": base_url,
+                                            "api_key": api_key},
+                        )
 
-                            llm = SPO_LLM.get_instance()
-                            messages = [
-                                {"role": "user", "content": f"{test_prompt}\n\n{test_question}"}]
+                        llm = SPO_LLM.get_instance()
+                        messages = [
+                            {"role": "user", "content": f"{test_prompt}\n\n{test_question}"}]
 
-                            async def get_response():
-                                return await llm.responser(request_type=RequestType.EXECUTE, messages=messages)
+                        async def get_response():
+                            return await llm.responser(request_type=RequestType.EXECUTE, messages=messages)
 
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            try:
-                                response = loop.run_until_complete(
-                                    get_response())
-                            finally:
-                                loop.close()
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            response = loop.run_until_complete(
+                                get_response())
+                        finally:
+                            loop.close()
 
-                            st.subheader("回答：")
-                            st.markdown(response)
+                        st.subheader("回答：")
+                        st.markdown(response)
 
-                    except Exception as e:
-                        st.error(f"生成回答时出错：{str(e)}")
+                except Exception as e:
+                    st.error(f"生成回答时出错：{str(e)}")
                 else:
                     st.warning("请输入提示词和问题。")
 
