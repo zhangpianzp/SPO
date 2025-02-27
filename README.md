@@ -20,7 +20,7 @@ SPO（Self-Supervised Prompt Optimization）是一种基于大语言模型自监
 > 
 > 结合丰富的公共镜像社区，优云智算提供多种预配置的容器镜像，如LLamaFactory、SD-webUI 和 LLM 等，实现一键部署，5分钟就能快速上手 AI，助力用户快速启动和扩展项目。
 
-### 1. 使用该镜像创建实
+### 1. 使用该镜像创建实例
 
 **镜像发布页（神秘通道）**：<https://www.compshare.cn/images-detail?ImageID=compshareImage-18u5hmtunbzm&referral_code=4sOb83sEXe4BLkKYqw9G4P&ytag=GPU_hych_Lcsdn_csdn_display>
 
