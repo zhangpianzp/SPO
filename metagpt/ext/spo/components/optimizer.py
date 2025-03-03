@@ -64,7 +64,8 @@ class PromptOptimizer:
             await self._handle_first_round(prompt_path, data)
             return
 
-        directory = self.prompt_utils.create_round_directory(prompt_path, self.round)
+        directory = self.prompt_utils.create_round_directory(
+            prompt_path, self.round)
         new_prompt = await self._generate_optimized_prompt()
         self.prompt = new_prompt
 
@@ -78,7 +79,8 @@ class PromptOptimizer:
 
     async def _handle_first_round(self, prompt_path: Path, data: List[dict]) -> None:
         logger.info("\n⚡ RUNNING Round 1 PROMPT ⚡\n")
-        directory = self.prompt_utils.create_round_directory(prompt_path, self.round)
+        directory = self.prompt_utils.create_round_directory(
+            prompt_path, self.round)
 
         prompt, _, _, _ = load.load_meta_data()
         self.prompt = prompt
@@ -95,7 +97,8 @@ class PromptOptimizer:
         samples = self.data_utils.get_best_round()
 
         logger.info(f"\n🚀Round {self.round} OPTIMIZATION STARTING 🚀\n")
-        logger.info(f"\nSelecting prompt for round {samples['round']} and advancing to the iteration phase\n")
+        logger.info(
+            f"\nSelecting prompt for round {samples['round']} and advancing to the iteration phase\n")
 
         golden_answer = self.data_utils.list_to_markdown(qa)
         best_answer = self.data_utils.list_to_markdown(samples["answers"])
@@ -109,7 +112,8 @@ class PromptOptimizer:
         )
 
         response = await self.llm.responser(
-            request_type=RequestType.OPTIMIZE, messages=[{"role": "user", "content": optimize_prompt}]
+            request_type=RequestType.OPTIMIZE, messages=[
+                {"role": "user", "content": optimize_prompt}]
         )
 
         modification = extract_content(response, "modification")
@@ -133,4 +137,5 @@ class PromptOptimizer:
 
     def _log_optimization_result(self, success):
         logger.info("\n🎯 OPTIMIZATION RESULT 🎯\n")
-        logger.info(f"\nRound {self.round} Optimization: {'✅ SUCCESS' if success else '❌ FAILED'}\n")
+        logger.info(
+            f"\nRound {self.round} Optimization: {'✅ SUCCESS' if success else '❌ FAILED'}\n")

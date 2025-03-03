@@ -1,12 +1,13 @@
 import asyncio
 from pathlib import Path
 from typing import Dict, List
-
 import streamlit as st
 import yaml
 from loguru import logger as _logger
 import shutil
 import uuid
+import os
+import time
 
 from metagpt.const import METAGPT_ROOT
 from metagpt.ext.spo.components.optimizer import PromptOptimizer
@@ -119,22 +120,16 @@ def main():
     if "optimization_results" not in st.session_state:
         st.session_state.optimization_results = []
 
-    try:
-        config_path = Path("config/config2.yaml")
-        if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                config_data = yaml.safe_load(f)
-                if "llm" in config_data:
-                    llm_config = config_data["llm"]
-                    st.session_state.base_url = llm_config.get(
-                        "base_url", "")
-                    st.session_state.api_key = llm_config.get(
-                        "api_key", "")
-                    if "models" in config_data:
-                        st.session_state.available_models = list(
-                            config_data["models"].keys())
-    except Exception as e:
-        _logger.error(f"读取配置文件时出错：{str(e)}")
+    if "available_models" not in st.session_state:
+        st.session_state.available_models = []
+    if "base_url" not in st.session_state:
+        st.session_state.base_url = "https://api.example.com"
+    if "api_key" not in st.session_state:
+        st.session_state.api_key = ""
+    if "is_optimizing" not in st.session_state:
+        st.session_state.is_optimizing = False
+    if "config_path" not in st.session_state:
+        st.session_state.config_path = "config/config2.yaml"
 
     workspace_dir = get_user_workspace()
 
@@ -167,99 +162,171 @@ def main():
         st.header("LLM 配置")
 
         # LLM 设置
-        st.subheader("LLM 设置")
+        st.subheader("添加 LLM 模型")
 
         base_url = st.text_input("BASE URL", value=st.session_state.get(
             "base_url", "https://api.example.com"))
         api_key = st.text_input(
             "API KEY", type="password", value=st.session_state.get("api_key", ""))
+        config_path = st.session_state.get(
+            "config_path", "config/config2.yaml")
         model_name = st.text_input("模型名称", value="")
 
-        if st.button("连通性测试并添加模型"):
-            try:
-                if not model_name:
-                    st.error("请输入模型名称")
-                    return
-
-                # 进行LLM连通性测试
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("连通性测试并添加模型"):
                 try:
-                    from openai import OpenAI
+                    if not model_name:
+                        st.error("请输入模型名称")
+                        return
 
-                    # 初始化OpenAI客户端
-                    client = OpenAI(
-                        api_key=api_key,
-                        base_url=base_url
-                    )
+                    # 进行LLM连通性测试
+                    try:
+                        from openai import OpenAI
 
-                    # 测试连通性
-                    response = client.chat.completions.create(
-                        model=model_name,
-                        messages=[{"role": "user", "content": "Hello"}],
-                        temperature=0
-                    )
+                        # 初始化OpenAI客户端
+                        client = OpenAI(
+                            api_key=api_key,
+                            base_url=base_url
+                        )
 
-                    # 连通性测试成功，保存配置
-                    config_path = Path("config/config2.yaml")
-                    config_data = {}
-                    if config_path.exists():
-                        with open(config_path, "r", encoding="utf-8") as f:
-                            config_data = yaml.safe_load(f) or {}
+                        # 测试连通性
+                        response = client.chat.completions.create(
+                            model=model_name,
+                            messages=[{"role": "user", "content": "Hello"}],
+                            temperature=0
+                        )
 
-                    config_data["llm"] = {
-                        "api_type": "openai",
-                        "base_url": base_url,
-                        "api_key": api_key
-                    }
-                    if "models" not in config_data:
-                        config_data["models"] = {}
-                    config_data["models"][model_name] = {
-                        "api_type": "openai",
-                        "base_url": "${llm.base_url}",
-                        "api_key": "${llm.api_key}",
-                        "temperature": 0
-                    }
+                        if model_name not in st.session_state.available_models:
+                            st.session_state.available_models.append(
+                                model_name)
+                        st.session_state.base_url = base_url
+                        st.session_state.api_key = api_key
+                        st.success("连通性测试成功，模型已添加！")
+                    except Exception as e:
+                        st.error(f"LLM连通性测试失败：{str(e)}")
+                        return
+                    finally:
+                        if 'loop' in locals():
+                            loop.close()
 
-                    with open(config_path, "w", encoding="utf-8") as f:
-                        yaml.dump(config_data, f, allow_unicode=True,
-                                  sort_keys=False, default_flow_style=False, indent=2)
-
-                    st.session_state.base_url = base_url
-                    st.session_state.api_key = api_key
-                    st.session_state.available_models = list(
-                        config_data["models"].keys())
-                    st.session_state.config_loaded = True
-                    st.success("连通性测试成功，配置已保存！")
                 except Exception as e:
-                    st.error(f"LLM连通性测试失败：{str(e)}")
-                    return
-                finally:
-                    if 'loop' in locals():
-                        loop.close()
+                    st.error(f"添加模型时出错：{str(e)}")
 
-            except Exception as e:
-                st.error(f"保存配置时出错：{str(e)}")
+        with col2:
+            pass
 
         # 优化模型和优化器设置
-        st.subheader("模型设置")
+        st.subheader("模型配置")
+
+        # 配置保存和加载按钮
+        col1, col2 = st.columns(2)
+        with col1:
+            # 创建配置数据
+            def get_config_data():
+                config_data = {}
+                config_data["llm"] = {
+                    "api_type": "openai",
+                    "base_url": base_url,
+                    "api_key": api_key
+                }
+
+                if "models" not in config_data:
+                    config_data["models"] = {}
+
+                for model in st.session_state.available_models:
+                    config_data["models"][model] = {
+                        "api_type": "openai",
+                        "base_url": base_url,
+                        "api_key": api_key,
+                        "temperature": 0
+                    }
+                return config_data
+
+            # 将配置转换为YAML字符串
+            def get_yaml_string():
+                try:
+                    config_data = get_config_data()
+                    return yaml.dump(config_data, allow_unicode=True, sort_keys=False, default_flow_style=False, indent=2)
+                except Exception as e:
+                    st.error(f"生成配置时出错：{str(e)}")
+                    return ""
+
+            # 使用download_button组件提供下载功能
+            if not st.session_state.is_optimizing:
+                yaml_str = get_yaml_string()
+                st.download_button(
+                    label="保存当前模型列表",
+                    data=yaml_str,
+                    file_name="config_models.yaml",
+                    mime="text/yaml",
+                    help="将当前模型列表下载到本地"
+                )
+            else:
+                st.button("保存当前模型列表", disabled=True)
+
+        with col2:
+            # 每次上传新文件时生成一个新的key，防止显示之前上传的文件
+            if "uploader_key" not in st.session_state:
+                st.session_state.uploader_key = f"config_uploader_{int(time.time())}"
+            uploaded_file = st.file_uploader(
+                "上传模型列表文件", type=["yaml"], key=st.session_state.uploader_key)
+            if uploaded_file is not None:  # 如果用户上传了文件
+                try:
+                    # 创建临时文件保存上传的内容
+                    file_path = os.path.join(
+                        os.getcwd(), "config", uploaded_file.name)
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+
+                    # 处理上传的文件
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        config_data = yaml.safe_load(f)
+                        if "llm" in config_data:
+                            llm_config = config_data["llm"]
+                            st.session_state.base_url = llm_config.get(
+                                "base_url", "")
+                            st.session_state.api_key = llm_config.get(
+                                "api_key", "")
+                            if "models" in config_data:
+                                st.session_state.available_models = list(
+                                    config_data["models"].keys())
+                                st.session_state.config_path = file_path
+                                # 更新界面上的配置内容
+                                st.success("配置已成功加载")
+                except Exception as e:
+                    st.error(f"加载配置时出错：{str(e)}")
+
+        # 模型设置详细
         opt_model = st.selectbox(
-            "优化模型", st.session_state.get("available_models", ["Null"]), index=0
+            "优化模型", st.session_state.get("available_models", ["Null"]), index=0,
+            disabled=st.session_state.is_optimizing,
+            key=f"opt_model_{len(st.session_state.get('available_models', []))}"
         )
-        opt_temp = st.slider("优化温度", 0.0, 1.0, 0.7)
+        opt_temp = st.slider("优化温度", 0.0, 1.0, value=0.7, step=0.1,
+                             disabled=st.session_state.is_optimizing)
 
         eval_model = st.selectbox(
-            "评估模型", st.session_state.get("available_models", ["Null"]), index=0
+            "评估模型", st.session_state.get("available_models", ["Null"]), index=0,
+            disabled=st.session_state.is_optimizing,
+            key=f"eval_model_{len(st.session_state.get('available_models', []))}"
         )
-        eval_temp = st.slider("评估温度", 0.0, 1.0, 0.3)
+        eval_temp = st.slider("评估温度", 0.0, 1.0, value=0.3, step=0.1,
+                              disabled=st.session_state.is_optimizing)
 
         exec_model = st.selectbox(
-            "执行模型", st.session_state.get("available_models", ["Null"]), index=0
+            "执行模型", st.session_state.get("available_models", ["Null"]), index=0,
+            disabled=st.session_state.is_optimizing,
+            key=f"exec_model_{len(st.session_state.get('available_models', []))}"
         )
-        exec_temp = st.slider("执行温度", 0.0, 1.0, 0.0)
+        exec_temp = st.slider("执行温度", 0.0, 1.0, value=0.0, step=0.1,
+                              disabled=st.session_state.is_optimizing)
 
         # 优化器设置
         st.subheader("优化器设置")
-        initial_round = st.number_input("初始轮次", 1, 100, 1)
-        max_rounds = st.number_input("最大轮次", 1, 100, 10)
+        initial_round = st.number_input("初始轮次：决定了从第几轮优化结果继续优化", 1, 100, 1)
+        max_rounds = st.number_input(
+            "最大轮次", 1, 100, 10, disabled=st.session_state.is_optimizing)
 
     # 模板配置选项卡
     with tab_template:
@@ -270,24 +337,21 @@ def main():
         existing_templates = get_all_templates()
         template_options = existing_templates + ["创建新模板"]
 
-        template_selection = st.selectbox("选择模板", template_options)
+        template_selection = st.selectbox(
+            "选择模板", template_options, disabled=st.session_state.is_optimizing)
         is_new_template = template_selection == "创建新模板"
 
         if is_new_template:
-            template_name = st.text_input("新模板名称")
+            template_name = st.text_input(
+                "新模板名称", disabled=st.session_state.is_optimizing)
         else:
             template_name = template_selection
 
-        # 初始化template_path
-        template_path = None
-        if template_name:
-            template_path = settings_path / f"{template_name}.yaml"
-            template_data = load_yaml_template(template_path)
-
-        # 加载或初始化模板数据
-        template_data = {"prompt": "", "requirements": "", "qa": []}
-        if template_path and template_path.exists():
-            template_data = load_yaml_template(template_path)
+        # 初始化template_path和加载模板数据
+        template_path = settings_path / \
+            f"{template_name}.yaml" if template_name else None
+        template_data = load_yaml_template(template_path) if template_path and template_path.exists() else {
+            "prompt": "", "requirements": "", "qa": []}
 
         if "current_template" not in st.session_state or st.session_state.current_template != template_name:
             st.session_state.current_template = template_name
@@ -304,18 +368,19 @@ def main():
 
         # 使用session_state中的值填充输入框
         prompt = st.text_area(
-            "提示词", value=st.session_state.get("prompt", ""), height=100)
+            "提示词", value=st.session_state.get("prompt", ""), height=100, disabled=st.session_state.is_optimizing)
         requirements = st.text_area(
-            "要求", value=st.session_state.get("requirements", ""), height=100)
+            "要求", value=st.session_state.get("requirements", ""), height=100, disabled=st.session_state.is_optimizing)
 
         # 问答部分
         st.subheader("问答示例")
+        st.markdown(''':red[增加新的示例后需要 **保存模板** 才能应用！]''')
 
         if "qas" not in st.session_state:
             st.session_state.qas = []
 
         # 添加新问答按钮
-        if st.button("添加新问答"):
+        if st.button("添加新问答", disabled=st.session_state.is_optimizing):
             st.session_state.qas.append({"question": "", "answer": ""})
 
         # 编辑问答
@@ -333,7 +398,7 @@ def main():
                     f"答案 {i + 1}", st.session_state.qas[i].get("answer", ""), key=f"a_{i}", height=100
                 )
             with col3:
-                if st.button("🗑️", key=f"delete_{i}"):
+                if st.button("🗑️", key=f"delete_{i}", disabled=st.session_state.is_optimizing):
                     st.session_state.qas.pop(i)
                     st.rerun()
 
@@ -348,15 +413,11 @@ def main():
                 if "current_template" not in st.session_state or st.session_state.current_template != template_name:
                     st.session_state.current_template = template_name
                     st.session_state.qas = template_data.get("qa", [])
-                    prompt = template_data.get("prompt", "")
-                    requirements = template_data.get("requirements", "")
-                else:
-                    # 清空内容
-                    st.session_state.qas = []
-                    prompt = ""
-                    requirements = ""
-                    
-            if st.button("保存模板"):
+                    st.session_state.prompt = template_data.get("prompt", "")
+                    st.session_state.requirements = template_data.get(
+                        "requirements", "")
+
+            if st.button("保存模板", disabled=st.session_state.is_optimizing):
                 if not template_name:
                     st.error("必须填写模板名称！")
                 else:
@@ -372,9 +433,9 @@ def main():
     with tab_preview:
         if "current_template" in st.session_state:
             st.header("当前模板预览")
-            preview_data = {"qa": new_qas if 'new_qas' in locals() else [],
-                            "requirements": requirements if 'requirements' in locals() else "",
-                            "prompt": prompt if 'prompt' in locals() else ""}
+            preview_data = {"qa": st.session_state.get("qas", []),
+                            "requirements": st.session_state.get("requirements", ""),
+                            "prompt": st.session_state.get("prompt", "")}
             st.code(yaml.dump(preview_data, allow_unicode=True), language="yaml")
 
     # 优化日志选项卡
@@ -407,8 +468,10 @@ def main():
         # 开始优化按钮
         if st.button("开始优化"):
             try:
+                st.session_state.is_optimizing = True
                 # Initialize LLM
                 SPO_LLM.initialize(
+                    config_path=st.session_state.config_path,
                     optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
                                      "api_key": api_key},
                     evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,
@@ -434,12 +497,13 @@ def main():
                 prompt_path = optimizer.root_path / "prompts"
                 result_data = optimizer.data_utils.load_results(
                     prompt_path)
-                print(result_data)
                 st.session_state.optimization_results = result_data
+                st.session_state.is_optimizing = False
 
             except Exception as e:
                 st.error(f"发生错误：{str(e)}")
                 _logger.error(f"优化过程中出错：{str(e)}")
+                st.session_state.is_optimizing = False
 
     # 优化结果选项卡
     with tab_results:

@@ -19,21 +19,30 @@ class SPO_LLM:
 
     def __init__(
         self,
+        config_path: Optional[str] = None,
         optimize_kwargs: Optional[dict] = None,
         evaluate_kwargs: Optional[dict] = None,
         execute_kwargs: Optional[dict] = None,
     ) -> None:
-        self.evaluate_llm = LLM(llm_config=self._load_llm_config(evaluate_kwargs))
-        self.optimize_llm = LLM(llm_config=self._load_llm_config(optimize_kwargs))
-        self.execute_llm = LLM(llm_config=self._load_llm_config(execute_kwargs))
+        self.evaluate_llm = LLM(
+            llm_config=self._load_llm_config(config_path, evaluate_kwargs))
+        self.optimize_llm = LLM(
+            llm_config=self._load_llm_config(config_path, optimize_kwargs))
+        self.execute_llm = LLM(
+            llm_config=self._load_llm_config(config_path, execute_kwargs))
 
-    def _load_llm_config(self, kwargs: dict) -> Any:
+    def _load_llm_config(self, config_path: str, kwargs: dict) -> Any:
         model = kwargs.get("model")
         if not model:
             raise ValueError("'model' parameter is required")
 
         try:
-            model_config = ModelsConfig.default().get(model)
+            if config_path:
+                models_config = ModelsConfig.from_home(config_path)
+            else:
+                models_config = ModelsConfig.default()
+
+            model_config = models_config.get(model)
             if model_config is None:
                 raise ValueError(f"Model '{model}' not found in configuration")
 
@@ -48,7 +57,8 @@ class SPO_LLM:
         except AttributeError:
             raise ValueError(f"Model '{model}' not found in configuration")
         except Exception as e:
-            raise ValueError(f"Error loading configuration for model '{model}': {str(e)}")
+            raise ValueError(
+                f"Error loading configuration for model '{model}': {str(e)}")
 
     async def responser(self, request_type: RequestType, messages: List[dict]) -> str:
         llm_mapping = {
@@ -59,21 +69,24 @@ class SPO_LLM:
 
         llm = llm_mapping.get(request_type)
         if not llm:
-            raise ValueError(f"Invalid request type. Valid types: {', '.join([t.value for t in RequestType])}")
+            raise ValueError(
+                f"Invalid request type. Valid types: {', '.join([t.value for t in RequestType])}")
 
         response = await llm.acompletion(messages)
         return response.choices[0].message.content
 
     @classmethod
-    def initialize(cls, optimize_kwargs: dict, evaluate_kwargs: dict, execute_kwargs: dict) -> None:
+    def initialize(cls, config_path: str, optimize_kwargs: dict, evaluate_kwargs: dict, execute_kwargs: dict) -> None:
         """Initialize the global instance"""
-        cls._instance = cls(optimize_kwargs, evaluate_kwargs, execute_kwargs)
+        cls._instance = cls(config_path, optimize_kwargs,
+                            evaluate_kwargs, execute_kwargs)
 
     @classmethod
     def get_instance(cls) -> "SPO_LLM":
         """Get the global instance"""
         if cls._instance is None:
-            raise RuntimeError("SPO_LLM not initialized. Call initialize() first.")
+            raise RuntimeError(
+                "SPO_LLM not initialized. Call initialize() first.")
         return cls._instance
 
 
