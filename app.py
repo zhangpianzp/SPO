@@ -128,8 +128,6 @@ def main():
         st.session_state.api_key = ""
     if "is_optimizing" not in st.session_state:
         st.session_state.is_optimizing = False
-    if "config_path" not in st.session_state:
-        st.session_state.config_path = "config/config2.yaml"
 
     workspace_dir = get_user_workspace()
 
@@ -168,8 +166,6 @@ def main():
             "base_url", "https://api.example.com"))
         api_key = st.text_input(
             "API KEY", type="password", value=st.session_state.get("api_key", ""))
-        config_path = st.session_state.get(
-            "config_path", "config/config2.yaml")
         model_name = st.text_input("模型名称", value="")
 
         col1, col2 = st.columns(2)
@@ -273,27 +269,19 @@ def main():
                 "上传模型列表文件", type=["yaml"], key=st.session_state.uploader_key)
             if uploaded_file is not None:  # 如果用户上传了文件
                 try:
-                    # 创建临时文件保存上传的内容
-                    file_path = os.path.join(
-                        os.getcwd(), "config", uploaded_file.name)
-                    with open(file_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-
-                    # 处理上传的文件
-                    with open(file_path, "r", encoding="utf-8") as f:
-                        config_data = yaml.safe_load(f)
-                        if "llm" in config_data:
-                            llm_config = config_data["llm"]
-                            st.session_state.base_url = llm_config.get(
-                                "base_url", "")
-                            st.session_state.api_key = llm_config.get(
-                                "api_key", "")
-                            if "models" in config_data:
-                                st.session_state.available_models = list(
-                                    config_data["models"].keys())
-                                st.session_state.config_path = file_path
-                                # 更新界面上的配置内容
-                                st.success("配置已成功加载")
+                    # 直接从上传的文件对象中读取内容
+                    config_data = yaml.safe_load(uploaded_file)
+                    if "llm" in config_data:
+                        llm_config = config_data["llm"]
+                        st.session_state.base_url = llm_config.get(
+                            "base_url", "")
+                        st.session_state.api_key = llm_config.get(
+                            "api_key", "")
+                        if "models" in config_data:
+                            st.session_state.available_models = list(
+                                config_data["models"].keys())
+                            # 更新界面上的配置内容
+                            st.success("配置已成功加载")
                 except Exception as e:
                     st.error(f"加载配置时出错：{str(e)}")
 
@@ -471,7 +459,6 @@ def main():
                 st.session_state.is_optimizing = True
                 # Initialize LLM
                 SPO_LLM.initialize(
-                    config_path=st.session_state.config_path,
                     optimize_kwargs={"model": opt_model, "temperature": opt_temp, "base_url": base_url,
                                      "api_key": api_key},
                     evaluate_kwargs={"model": eval_model, "temperature": eval_temp, "base_url": base_url,

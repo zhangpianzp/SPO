@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Any, List, Optional
 
 from metagpt.configs.models_config import ModelsConfig
+from metagpt.configs.llm_config import LLMConfig
 from metagpt.llm import LLM
 from metagpt.logs import logger
 
@@ -19,46 +20,36 @@ class SPO_LLM:
 
     def __init__(
         self,
-        config_path: Optional[str] = None,
         optimize_kwargs: Optional[dict] = None,
         evaluate_kwargs: Optional[dict] = None,
         execute_kwargs: Optional[dict] = None,
     ) -> None:
         self.evaluate_llm = LLM(
-            llm_config=self._load_llm_config(config_path, evaluate_kwargs))
+            llm_config=self._load_llm_config(evaluate_kwargs))
         self.optimize_llm = LLM(
-            llm_config=self._load_llm_config(config_path, optimize_kwargs))
+            llm_config=self._load_llm_config(optimize_kwargs))
         self.execute_llm = LLM(
-            llm_config=self._load_llm_config(config_path, execute_kwargs))
+            llm_config=self._load_llm_config(execute_kwargs))
 
-    def _load_llm_config(self, config_path: str, kwargs: dict) -> Any:
+    def _load_llm_config(self, kwargs: dict) -> Any:
         model = kwargs.get("model")
         if not model:
             raise ValueError("'model' parameter is required")
 
         try:
-            if config_path:
-                models_config = ModelsConfig.from_home(config_path)
-            else:
-                models_config = ModelsConfig.default()
+            # 使用kwargs直接构建model配置
+            model_config = LLMConfig(
+                model=model,
+                api_type=kwargs.get("api_type", "openai"),
+                base_url=kwargs.get("base_url"),
+                api_key=kwargs.get("api_key"),
+                temperature=kwargs.get("temperature", 0.7)
+            )
+            return model_config
 
-            model_config = models_config.get(model)
-            if model_config is None:
-                raise ValueError(f"Model '{model}' not found in configuration")
-
-            config = model_config.model_copy()
-
-            for key, value in kwargs.items():
-                if hasattr(config, key):
-                    setattr(config, key, value)
-
-            return config
-
-        except AttributeError:
-            raise ValueError(f"Model '{model}' not found in configuration")
         except Exception as e:
             raise ValueError(
-                f"Error loading configuration for model '{model}': {str(e)}")
+                f"Error initializing configuration for model '{model}': {str(e)}")
 
     async def responser(self, request_type: RequestType, messages: List[dict]) -> str:
         llm_mapping = {
@@ -76,9 +67,9 @@ class SPO_LLM:
         return response.choices[0].message.content
 
     @classmethod
-    def initialize(cls, config_path: str, optimize_kwargs: dict, evaluate_kwargs: dict, execute_kwargs: dict) -> None:
+    def initialize(cls, optimize_kwargs: dict, evaluate_kwargs: dict, execute_kwargs: dict) -> None:
         """Initialize the global instance"""
-        cls._instance = cls(config_path, optimize_kwargs,
+        cls._instance = cls(optimize_kwargs,
                             evaluate_kwargs, execute_kwargs)
 
     @classmethod
