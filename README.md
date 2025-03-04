@@ -8,6 +8,13 @@ SPO（Self-Supervised Prompt Optimization）是一种基于大语言模型自监
 
 # 历史更新日志
 
+## 2025.03.05
+- 修复了在模型配置中已添加的模型，在开始优化时会出现对应模型配置不存在的问题，原因是由于上一笔修改的逻辑BUG导致只会加载的配置文件来解析模型配置，现进行改进如下：
+  - 配置文件处理改进
+    - 简化了`SPO_LLM`类的初始化流程。
+    - 修改了`metagpt/ext/spo/utils/llm_client.py`的`_load_llm_config`方法，直接通过前端传参来初始化`ModelsConfig`类。
+    - 移除了加载配置时会将配置文件上传到运行环境的步骤，改为直接在前端进行解析，进一步避免了敏感数据泄露的风险。
+
 ## 2025.03.03
 - 优化了界面状态管理，在`app.py`添加了`is_optimizing` 状态来控制在优化提示词时界面的交互。
 - 改进了`metagpt/ext/spo/utils/llm_client.py`配置文件的处理逻辑，支持保存和加载指定的模型配置文件，避免了在云端部署项目时会导致敏感数据泄漏的问题。（因为原`llm_client.py`默认通过`ModelsConfig`类使用的`default`方法加载模型配置，会默认固定加载`config/config2.yaml`配置文件，这里增加指定文件路径的逻辑并通过`ModelsConfig`类的`from_home`方法加载上传到`config/`中的yaml配置文件。）
