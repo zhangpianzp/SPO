@@ -13,6 +13,15 @@ from metagpt.const import METAGPT_ROOT
 from metagpt.ext.spo.components.optimizer import PromptOptimizer
 from metagpt.ext.spo.utils.llm_client import SPO_LLM, RequestType
 
+from dotenv import load_dotenv
+load_dotenv()
+
+# 读取环境变量
+
+
+API_KEY_ENV = os.getenv("API_KEY", "")
+BASE_URL_ENV = os.getenv("BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+MODEL_ENV = os.getenv("MODEL", "qwen-max-latest")
 
 def get_user_workspace():
     if "user_id" not in st.session_state:
@@ -162,11 +171,12 @@ def main():
         # LLM 设置
         st.subheader("添加 LLM 模型")
 
-        base_url = st.text_input("BASE URL", value=st.session_state.get(
-            "base_url", "https://api.example.com"))
-        api_key = st.text_input(
-            "API KEY", type="password", value=st.session_state.get("api_key", ""))
-        model_name = st.text_input("模型名称", value="")
+        base_url = st.text_input("BASE URL", value=BASE_URL_ENV)
+        # 设置默认隐藏
+        api_key = API_KEY_ENV 
+        #st.text_input(
+         #   "API KEY", type="password", value=API_KEY_ENV)
+        model_name = st.text_input("模型名称", value=MODEL_ENV)
 
         col1, col2 = st.columns(2)
         with col1:
